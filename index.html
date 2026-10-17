@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>StudySync AI</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f7fb;--card:#fff;--ink:#1f2937;--mut:#6b7280;--acc:#4f46e5;--acc2:#e0e7ff;--line:#e5e7eb;--ok:#059669;--warn:#b45309;--bad:#b91c1c}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f172a;--card:#1e293b;--ink:#e5e7eb;--mut:#94a3b8;--acc:#818cf8;--acc2:#312e81;--line:#334155;--ok:#34d399;--warn:#fbbf24;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#0f172a;--card:#1e293b;--ink:#e5e7eb;--mut:#94a3b8;--acc:#818cf8;--acc2:#312e81;--line:#334155;--ok:#34d399;--warn:#fbbf24;--bad:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--card);z-index:10}
+.app{display:flex;min-height:100vh}
+nav{width:200px;background:var(--card);border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:env(safe-area-inset-top,0px);height:100vh;flex-shrink:0}
+nav h1{font-size:18px;margin:0 8px 14px;color:var(--acc)}
+nav button{display:block;width:100%;text-align:left;border:0;background:none;color:var(--ink);padding:9px 10px;border-radius:8px;font:inherit;cursor:pointer}
+nav button.on{background:var(--acc2);color:var(--acc);font-weight:600}
+main{flex:1;padding:20px;max-width:980px;min-width:0}
+h2{margin:0 0 14px;font-size:22px}h3{margin:0 0 8px;font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.grid .card{margin:0}.big{font-size:26px;font-weight:700;color:var(--acc)}.mut{color:var(--mut);font-size:13px}
+input,select,textarea,button.b{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+textarea{width:100%;min-height:80px}input[type=checkbox],input[type=radio]{accent-color:var(--acc)}
+button.b{cursor:pointer;background:var(--acc);color:#fff;border-color:var(--acc)}button.b.s{background:var(--card);color:var(--ink);border-color:var(--line)}
+button.b.sm{padding:3px 8px;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.sess{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--line);padding:9px 0}
+.pill{font-size:12px;border-radius:99px;padding:1px 8px;background:var(--acc2);color:var(--acc)}.high{color:var(--bad)}.medium{color:var(--warn)}.low{color:var(--ok)}
+.bar{height:8px;background:var(--line);border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+.warn{border-left:4px solid var(--warn)}.empty{text-align:center;color:var(--mut);padding:22px}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border-top:1px solid var(--line);text-align:left;font-size:14px}
+@media(max-width:700px){.app{flex-direction:column}nav{width:100%;height:auto;position:static;display:flex;overflow-x:auto;padding:8px;border:0;border-bottom:1px solid var(--line)}nav h1{display:none}nav button{width:auto;white-space:nowrap}main{padding:14px}}
+</style></head><body>
+<div class="app"><nav id="nav"></nav><main id="main"></main></div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const pd=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)},addD=(s,n)=>{const d=pd(s);d.setDate(d.getDate()+n);return iso(d)};
+const hm=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'),tm=s=>{const [h,m]=s.split(':').map(Number);return h*60+m};
+const dd=(a,b)=>Math.round((pd(a)-pd(b))/864e5),today=()=>iso(new Date()),nowMin=()=>{const n=new Date();return n.getHours()*60+n.getMinutes()};
+const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],KEY='studysync.v1';
+const def=()=>({subjects:[],topics:[],sessions:[],quizzes:[],n:1,avail:{0:['10:00','13:00'],1:['18:00','20:00'],2:['18:00','20:00'],3:['18:00','20:00'],4:['18:00','20:00'],5:['18:00','20:00'],6:['10:00','13:00']}});
+let S;try{S=JSON.parse(localStorage.getItem(KEY))||def()}catch(e){S=def()}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+let view='dash',pend=null,msg='',smp=null,aiOut='',quiz=null;
+if(window.claude&&claude.use)claude.use('sample').then(x=>{smp=x;if(view==='ai')render()}).catch(()=>{});
+const sub=id=>S.subjects.find(s=>s.id===id),tp=id=>S.topics.find(t=>t.id===id);
+const mins=x=>x.status==='done'?x.e-x.s:x.status==='partial'?x.dm:0;
+const studied=tid=>S.sessions.filter(x=>x.tid===tid).reduce((a,x)=>a+mins(x),0);
+
+function score(i,d){const t=i.t,b=.35*t.imp+.25*t.diff+.25*(6-t.conf);return b+(i.ex?8/Math.max(1,dd(i.ex,d)):0)}
+function gen(from,now){
+  const hist=S.sessions.map(x=>({...x,status:x.status==='planned'&&x.date<from?'missed':x.status})).filter(x=>x.status!=='planned');
+  const items=S.topics.map(t=>{const sb=sub(t.sid),ex=sb&&sb.exam||'';return{t,ex,rem:t.min-studied(t.id),last:ex?addD(ex,-1):''}}).filter(i=>i.rem>0);
+  const out=[],un=[],warn=[];let end=from;
+  items.forEach(i=>{const e=i.last||addD(from,13);if(e>end)end=e});if(end>addD(from,119))end=addD(from,119);
+  for(let d=from;d<=end;d=addD(d,1)){
+    const a=S.avail[pd(d).getDay()];if(!a)continue;let free=[[Math.max(tm(a[0]),d===from?now:0),tm(a[1])]];
+    hist.filter(x=>x.date===d&&(x.status==='done'||x.status==='partial')).forEach(x=>{free=free.flatMap(([s,e])=>x.e<=s||x.s>=e?[[s,e]]:[[s,Math.max(s,x.s)],[Math.min(e,x.e),e]]).filter(([s,e])=>e>s)});
+    const used=new Set();
+    for(;;){
+      const c=items.filter(i=>i.rem>0&&!used.has(i.t.id)&&(!i.last||d<=i.last)).sort((p,q)=>score(q,d)-score(p,d)||p.t.id-q.t.id);let placed=false;
+      for(const i of c){
+        const need=Math.min(i.rem,25),k=free.findIndex(([s,e])=>e-s>=need);if(k<0)continue;
+        const [s,e]=free[k],len=e-s;let take=Math.min(i.rem,90,len);if(i.rem-take>0&&i.rem-take<25&&len>=i.rem)take=i.rem;
+        const t=i.t,b=.35*t.imp+.25*t.diff+.25*(6-t.conf),days=i.ex?dd(i.ex,d):null,r=[];
+        if(i.ex)r.push(sub(t.sid).name+' exam in '+days+' day'+(days===1?'':'s'));if(t.diff>=4)r.push('hard topic ('+t.diff+'/5)');if(t.conf<=2)r.push('low confidence ('+t.conf+'/5)');if(t.imp>=4)r.push('high importance');
+        out.push({id:S.n++,tid:t.id,date:d,s,e:s+take,status:'planned',dm:0,prio:(days!==null&&days<=7)||b>=3.4?'high':b>=2.5||(days!==null&&days<=21)?'medium':'low',why:r.length?r.join('; '):'Routine coverage to stay on schedule'});
+        if(s+take+10<e)free[k]=[s+take+10,e];else free.splice(k,1);i.rem-=take;used.add(t.id);placed=true;break}
+      if(!placed)break}}
+  let short=0;items.forEach(i=>{if(i.rem>0){short+=i.rem;un.push({name:i.t.name,rem:i.rem,why:i.ex&&i.last<from?'Exam date has passed or is today.':'Not enough available time before the exam.'})}});
+  if(!Object.keys(S.avail).length)warn.push('No study availability is set, so nothing could be scheduled.');
+  if(un.length)warn.push('Your available time is not enough to cover everything ('+short+' min short). The highest-priority topics were scheduled first.');
+  return{sessions:[...hist,...out].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.s-b.s),un,warn,out}}
+function propose(){
+  const from=today(),old=S.sessions.filter(x=>x.status==='planned'&&x.date>=from),r=gen(from,nowMin());
+  const sig=x=>x.tid+'|'+x.date+'|'+x.s+'|'+x.e,ns=new Set(r.out.map(sig)),removed=old.filter(x=>!ns.has(sig(x))).length;
+  r.removed=removed;r.added=r.out.length;r.confirm=removed>=3&&removed/old.length>.5;
+  const missed=S.sessions.filter(x=>(x.status==='planned'&&x.date<from)||x.status==='skipped'||x.status==='partial').length;
+  r.expl='Completed work is kept. '+(missed?missed+' missed, skipped or partial session(s) were taken into account. ':'')+removed+' planned session(s) moved or removed, '+r.added+' scheduled.';
+  if(r.confirm){pend=r}else{S.sessions=r.sessions;pend=null;msg=r.expl;save()}
+  S._last={un:r.un,warn:r.warn};save();render()}
+function applyPend(){if(pend){S.sessions=pend.sessions;msg=pend.expl;pend=null;save();render()}}
+function mark(id,st){const x=S.sessions.find(q=>q.id===id);if(!x)return;x.status=st;if(st==='partial'||st==='planned')x.dm=0;save();msg=st==='skipped'||st==='partial'?'Session updated. Press “Reschedule” to get a revised plan.':'';render()}
+function setDm(id,v){const x=S.sessions.find(q=>q.id===id);if(x){x.dm=Math.max(0,Math.min(parseInt(v,10)||0,x.e-x.s));save();render()}}
+let armed='';function conf(k){if(armed===k){armed='';return true}armed=k;msg='Press the button again to confirm.';render();return false}
+function addSubject(e){e.preventDefault();const f=e.target;S.subjects.push({id:S.n++,name:f.name.value.trim(),exam:f.exam.value});save();render()}
+function addTopic(e){e.preventDefault();const f=e.target;S.topics.push({id:S.n++,sid:+f.sid.value,name:f.name.value.trim(),diff:+f.diff.value,imp:+f.imp.value,conf:+f.conf.value,min:+f.min.value});save();render()}
+function bulk(e){e.preventDefault();const f=e.target,sid=+f.sid.value;f.lines.value.split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>S.topics.push({id:S.n++,sid,name:l.slice(0,120),diff:3,imp:3,conf:3,min:60}));save();render()}
+function delT(id){S.topics=S.topics.filter(t=>t.id!==id);S.sessions=S.sessions.filter(x=>x.tid!==id);save();render()}
+function delS(id){if(!conf('s'+id))return;msg='';S.topics.filter(t=>t.sid===id).forEach(t=>S.sessions=S.sessions.filter(x=>x.tid!==t.id));S.topics=S.topics.filter(t=>t.sid!==id);S.subjects=S.subjects.filter(s=>s.id!==id);save();render()}
+function setAv(d,k,v){const a=S.avail[d]=S.avail[d]||['18:00','20:00'];if(k==='on'){if(!v)delete S.avail[d]}else{a[k]=v}if(S.avail[d]&&tm(S.avail[d][0])>=tm(S.avail[d][1])){msg='Start time must be before end time.'}save();render()}
+function resetAll(){if(conf('all')){S=def();msg='';save();render()}}
+function exportData(){const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='studysync-data.json';a.click()}
+async function ask(){const q=$('#q').value.trim(),n=$('#notes').value.trim();if(!q||!smp)return;aiOut='Thinking…';render2();
+  try{const r=await smp('You are a study assistant. Use ONLY the NOTES to answer when they contain the answer, and start with "From your notes:". If they do not contain it, start with "Not in your notes (general explanation):" and keep it brief and plain.\nNOTES:\n'+n+'\nQUESTION: '+q);aiOut=r.text}catch(e){aiOut='The AI request failed ('+(e&&e.code||'error')+').'}render2()}
+async function mkQuiz(){const t=$('#qt').value.trim(),n=$('#notes').value.trim();if(!t||!smp)return;quiz={loading:1};render2();
+  try{const r=await smp.json('Create 5 multiple-choice practice questions on: '+t+'. '+(n?'Base them on these NOTES:\n'+n+'\n':'')+'Return ONLY a JSON array of objects {"q":string,"options":[4 strings],"answer":0-3,"explanation":string}. These are practice questions, not real exam questions.');
+    quiz={topic:t,qs:Array.isArray(r)?r.slice(0,5):[],done:false}}catch(e){quiz={err:'Quiz generation failed ('+(e&&e.code||'error')+').'}}render2()}
+function grade(){const qs=quiz.qs;let sc=0;qs.forEach((q,i)=>{const c=document.querySelector('input[name=q'+i+']:checked');q.pick=c?+c.value:-1;if(q.pick===q.answer)sc++});quiz.done=true;quiz.score=sc;S.quizzes.push({topic:quiz.topic,score:sc,total:qs.length,date:today()});save();render2()}
+const render2=()=>{if(view==='ai')render()};
+
+function V_dash(){
+  const t=today(),ts=S.sessions.filter(x=>x.date===t),wk=addD(t,-((pd(t).getDay()+6)%7)),wm=S.sessions.filter(x=>x.date>=wk&&x.date<=addD(wk,6)).reduce((a,x)=>a+mins(x),0);
+  const tot=S.topics.reduce((a,x)=>a+x.min,0),dn=S.topics.reduce((a,x)=>a+Math.min(x.min,studied(x.id)),0),pct=tot?Math.round(100*dn/tot):0;
+  const ex=S.subjects.filter(s=>s.exam&&s.exam>=t).sort((a,b)=>a.exam<b.exam?-1:1);
+  const att=S.subjects.map(s=>{const ts2=S.topics.filter(x=>x.sid===s.id),m=ts2.reduce((a,x)=>a+x.min,0),d=ts2.reduce((a,x)=>a+Math.min(x.min,studied(x.id)),0);return{s,m,p:m?d/m:1,c:ts2.length?ts2.reduce((a,x)=>a+x.conf,0)/ts2.length:5}}).filter(x=>x.m&&x.s.exam).sort((a,b)=>a.p-b.p).slice(0,3);
+  if(!S.subjects.length)return '<h2>Dashboard</h2><div class="card empty"><p><b>Welcome to StudySync AI.</b></p><p>Add your subjects, exam dates and topics, set your free hours, then generate a plan.</p><button class="b" onclick="go(\'syl\')">Add your syllabus</button></div>';
+  return '<h2>Dashboard</h2><div class="grid"><div class="card"><div class="big">'+pct+'%</div><div class="mut">Syllabus covered</div></div><div class="card"><div class="big">'+Math.round(wm/6)/10+' h</div><div class="mut">Studied this week</div></div><div class="card"><div class="big">'+S.sessions.filter(x=>x.status==='done').length+'/'+S.sessions.filter(x=>x.status!=='missed').length+'</div><div class="mut">Sessions done</div></div></div>'
+  +'<div class="card"><h3>Today’s sessions</h3>'+(ts.length?ts.map(sessRow).join(''):'<div class="mut">Nothing scheduled today. '+(S.sessions.length?'':'Generate a plan in the Planner.')+'</div>')+'</div>'
+  +'<div class="card"><h3>Upcoming exams</h3>'+(ex.length?ex.map(s=>'<div class="sess"><span>'+esc(s.name)+'</span><span class="pill">'+s.exam+' · '+dd(s.exam,t)+' days</span></div>').join(''):'<div class="mut">No upcoming exams.</div>')+'</div>'
+  +'<div class="card"><h3>Subjects needing attention</h3>'+(att.length?att.map(x=>'<div class="sess"><span>'+esc(x.s.name)+'</span><span class="mut">'+Math.round(x.p*100)+'% covered · avg confidence '+x.c.toFixed(1)+'/5</span></div>').join(''):'<div class="mut">Add exam dates and topics to see this.</div>')+'</div>'
+  +'<div class="row"><button class="b" onclick="go(\'syl\')">Add topics</button><button class="b" onclick="go(\'plan\')">Generate plan</button><button class="b s" onclick="go(\'ai\')">Start a quiz</button></div>'}
+function sessRow(x){const t=tp(x.tid);if(!t)return'';return '<div class="sess"><div><b>'+esc(t.name)+'</b> <span class="mut">'+esc((sub(t.sid)||{}).name||'')+'</span><br><span class="mut">'+x.date+' · '+hm(x.s)+'–'+hm(x.e)+' ('+(x.e-x.s)+' min) · <span class="'+x.prio+'">'+x.prio+'</span> · '+esc(x.why)+'</span></div><div class="row">'
+  +(x.status==='planned'?'<button class="b sm" onclick="mark('+x.id+',\'done\')">Done</button><button class="b sm s" onclick="mark('+x.id+',\'partial\')">Partial</button><button class="b sm s" onclick="mark('+x.id+',\'skipped\')">Skip</button>':(x.status==='partial'?'<label class="mut">Minutes done <input type="number" min="0" max="'+(x.e-x.s)+'" value="'+x.dm+'" style="width:70px" onchange="setDm('+x.id+',this.value)"></label>':'<span class="pill">'+x.status+'</span>')+'<button class="b sm s" onclick="mark('+x.id+',\'planned\')">Undo</button>')+'</div></div>'}
+function V_syl(){
+  const so=S.subjects.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');
+  return '<h2>My Syllabus</h2>'+(msg?'<div class="card">'+esc(msg)+'</div>':'')+'<div class="card"><h3>Add a subject</h3><form class="row" onsubmit="addSubject(event)"><input name="name" placeholder="Subject name" required maxlength="80"><label class="mut">Exam date <input type="date" name="exam"></label><button class="b">Add subject</button></form></div>'
+  +(S.subjects.length?'<div class="card"><h3>Add a topic</h3><form class="row" onsubmit="addTopic(event)"><select name="sid">'+so+'</select><input name="name" placeholder="Topic" required maxlength="120">'
+  +[['diff','Difficulty'],['imp','Importance'],['conf','Confidence']].map(([k,l])=>'<label class="mut">'+l+' <select name="'+k+'">'+[1,2,3,4,5].map(n=>'<option'+(n===3?' selected':'')+'>'+n+'</option>').join('')+'</select></label>').join('')
+  +'<label class="mut">Minutes <input type="number" name="min" value="60" min="15" max="600" step="5" style="width:80px"></label><button class="b">Add topic</button></form></div>'
+  +'<div class="card"><h3>Paste a syllabus (one topic per line)</h3><form onsubmit="bulk(event)"><div class="row"><select name="sid">'+so+'</select></div><textarea name="lines" placeholder="Unit 1: Limits&#10;Unit 2: Derivatives" required></textarea><div class="row"><button class="b">Import topics</button><span class="mut">Imported topics use default settings; edit by deleting and re-adding. PDF upload is not available in this web version.</span></div></form></div>':'')
+  +S.subjects.map(s=>{const ts=S.topics.filter(t=>t.sid===s.id);return '<div class="card"><div class="row"><h3 style="margin:0">'+esc(s.name)+'</h3><span class="pill">'+(s.exam?'Exam '+s.exam:'No exam date')+'</span><button class="b sm s" onclick="delS('+s.id+')">Delete subject</button></div>'
+  +(ts.length?'<div class="wrap"><table><tr><th>Topic</th><th>Diff</th><th>Imp</th><th>Conf</th><th>Min</th><th>Studied</th><th></th></tr>'+ts.map(t=>'<tr><td>'+esc(t.name)+'</td><td>'+t.diff+'</td><td>'+t.imp+'</td><td>'+t.conf+'</td><td>'+t.min+'</td><td>'+Math.min(t.min,studied(t.id))+'</td><td><button class="b sm s" onclick="delT('+t.id+')">Delete</button></td></tr>').join('')+'</table></div>':'<div class="mut">No topics yet.</div>')+'</div>'}).join('')}
+function V_plan(){
+  const l=S._last||{un:[],warn:[]},t=today(),days=[...new Set(S.sessions.filter(x=>x.status!=='missed'&&x.date>=t).map(x=>x.date))].sort(),missed=S.sessions.filter(x=>x.status==='missed'||(x.status==='planned'&&x.date<t));
+  return '<h2>Study Planner</h2><div class="card"><h3>Daily availability</h3>'+DAYS.map((n,d)=>{const a=S.avail[d];return '<div class="row"><label style="width:70px"><input type="checkbox" '+(a?'checked':'')+' onchange="setAv('+d+',\'on\',this.checked)"> '+n+'</label>'+(a?'<input type="time" value="'+a[0]+'" onchange="setAv('+d+',0,this.value)"> to <input type="time" value="'+a[1]+'" onchange="setAv('+d+',1,this.value)">':'<span class="mut">Not available</span>')+'</div>'}).join('')
+  +'<div class="row"><button class="b" onclick="propose()">'+(S.sessions.length?'Reschedule':'Generate plan')+'</button></div></div>'
+  +(msg?'<div class="card">'+esc(msg)+'</div>':'')
+  +(pend?'<div class="card warn"><b>This changes a large part of your plan.</b><p>'+esc(pend.expl)+'</p><div class="row"><button class="b" onclick="applyPend()">Apply new plan</button><button class="b s" onclick="pend=null;render()">Keep current plan</button></div></div>':'')
+  +l.warn.map(w=>'<div class="card warn">'+esc(w)+'</div>').join('')
+  +(l.un.length?'<div class="card warn"><h3>Not fully scheduled</h3>'+l.un.map(u=>'<div class="sess"><span>'+esc(u.name)+'</span><span class="mut">'+u.rem+' min left · '+esc(u.why)+'</span></div>').join('')+'</div>':'')
+  +(missed.length?'<div class="card"><h3>Missed sessions</h3><div class="mut">'+missed.length+' earlier session(s) were not completed. Reschedule to cover them.</div></div>':'')
+  +(days.length?days.map(d=>'<div class="card"><h3>'+DAYS[pd(d).getDay()]+' '+d+'</h3>'+S.sessions.filter(x=>x.date===d&&x.status!=='missed').map(sessRow).join('')+'</div>').join(''):'<div class="card empty">No sessions yet. Add topics and exam dates, then press Generate plan.</div>')}
+function V_ai(){
+  if(!smp)return '<h2>AI Learning Assistant</h2><div class="card warn"><b>AI features are not enabled here.</b><p class="mut">They need the viewer’s permission to use Claude, and are only available when this page is opened in claude.ai. Everything else works without it.</p></div>';
+  return '<h2>AI Learning Assistant</h2><div class="card"><h3>Your notes</h3><textarea id="notes" placeholder="Paste study material here. It is sent to Claude only when you press Ask or Create quiz."></textarea><p class="mut">Answers start with “From your notes” or “Not in your notes” so you can tell them apart. AI output can contain mistakes, so check it against your textbooks.</p>'
+  +'<div class="row"><input id="q" placeholder="Ask a question about your notes" style="flex:1;min-width:200px"><button class="b" onclick="ask()">Ask</button></div>'+(aiOut?'<div style="white-space:pre-wrap">'+esc(aiOut)+'</div>':'')+'</div>'
+  +'<div class="card"><h3>Practice quiz</h3><div class="row"><input id="qt" placeholder="Topic" list="tl" style="flex:1;min-width:200px"><datalist id="tl">'+S.topics.map(t=>'<option value="'+esc(t.name)+'">').join('')+'</datalist><button class="b" onclick="mkQuiz()">Create quiz</button></div>'
+  +(quiz?quiz.loading?'<div class="mut">Creating questions…</div>':quiz.err?'<div class="bad">'+esc(quiz.err)+'</div>':!quiz.qs.length?'<div class="mut">No questions came back. Try again.</div>':quiz.qs.map((q,i)=>'<div class="sess" style="display:block"><b>'+(i+1)+'. '+esc(q.q)+'</b>'+q.options.map((o,j)=>'<div><label><input type="radio" name="q'+i+'" value="'+j+'" '+(quiz.done?'disabled':'')+(quiz.done&&q.pick===j?' checked':'')+'> '+esc(o)+'</label>'+(quiz.done&&j===q.answer?' <span class="low">correct</span>':'')+'</div>').join('')+(quiz.done?'<div class="mut">'+esc(q.explanation||'')+'</div>':'')+'</div>').join('')+(quiz.done?'<p><b>Score: '+quiz.score+'/'+quiz.qs.length+'</b></p>':'<button class="b" onclick="grade()">Submit answers</button>'):'')+'</div>'}
+function V_prog(){
+  const rows=S.subjects.map(s=>{const ts=S.topics.filter(t=>t.sid===s.id),m=ts.reduce((a,x)=>a+x.min,0),d=ts.reduce((a,x)=>a+Math.min(x.min,studied(x.id)),0),p=m?Math.round(100*d/m):0;return '<div style="margin-bottom:10px"><div class="row" style="justify-content:space-between;margin:0"><span>'+esc(s.name)+'</span><span class="mut">'+p+'% · '+d+'/'+m+' min</span></div><div class="bar"><i style="width:'+p+'%"></i></div></div>'}).join('');
+  const done=S.sessions.filter(x=>x.status==='done').length,pend2=S.sessions.filter(x=>x.status==='planned').length,sk=S.sessions.filter(x=>x.status==='skipped'||x.status==='missed').length;
+  const byT={};S.quizzes.forEach(q=>{const b=byT[q.topic]=byT[q.topic]||{s:0,t:0};b.s+=q.score;b.t+=q.total});
+  return '<h2>Progress Analytics</h2>'+(S.subjects.length?'<div class="card"><h3>Subject progress</h3>'+rows+'</div><div class="grid"><div class="card"><div class="big">'+done+'</div><div class="mut">Completed</div></div><div class="card"><div class="big">'+pend2+'</div><div class="mut">Pending</div></div><div class="card"><div class="big">'+sk+'</div><div class="mut">Skipped or missed</div></div></div>':'<div class="card empty">No data yet.</div>')
+  +'<div class="card"><h3>Quiz results</h3>'+(Object.keys(byT).length?'<table><tr><th>Topic</th><th>Accuracy</th><th>Questions</th></tr>'+Object.entries(byT).map(([k,v])=>'<tr><td>'+esc(k)+'</td><td class="'+(v.s/v.t<.6?'high':'low')+'">'+Math.round(100*v.s/v.t)+'%</td><td>'+v.t+'</td></tr>').join('')+'</table><p class="mut">Topics under 60% are your weak spots: schedule revision for them.</p>':'<div class="mut">No quizzes taken yet.</div>')+'</div>'}
+function V_set(){return '<h2>Settings</h2>'+(msg?'<div class="card">'+esc(msg)+'</div>':'')+'<div class="card"><h3>Your data</h3><p class="mut">Everything is stored only in this browser on this device. There are no accounts, and nothing is shared with anyone. Clearing your browser data erases it. Notes and questions are sent to Claude only when you use the AI tab.</p><div class="row"><button class="b s" onclick="exportData()">Export data</button><button class="b s" onclick="resetAll()">Erase all data</button></div></div><div class="card"><h3>Reminders</h3><p class="mut">Upcoming sessions and exams appear on your Dashboard. Push and email reminders are not available in this version.</p></div>'}
+const VIEWS={dash:['Dashboard',V_dash],syl:['My Syllabus',V_syl],plan:['Study Planner',V_plan],ai:['AI Assistant',V_ai],prog:['Progress',V_prog],set:['Settings',V_set]};
+function go(v){view=v;msg='';render();window.scrollTo(0,0)}
+function render(){$('#nav').innerHTML='<h1>StudySync AI</h1>'+Object.entries(VIEWS).map(([k,[n]])=>'<button class="'+(k===view?'on':'')+'" onclick="go(\''+k+'\')">'+n+'</button>').join('');
+  const keep=view==='ai'&&$('#notes')?$('#notes').value:null,kq=view==='ai'&&$('#q')?$('#q').value:'';
+  $('#main').innerHTML=VIEWS[view][1]();if(keep!==null&&$('#notes')){$('#notes').value=keep;$('#q').value=kq}}
+render();
+</script></body></html>
